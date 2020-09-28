@@ -11,6 +11,8 @@ exports.TCPTracker = tcp_tracker.TCPTracker;
 exports.TCPSession = tcp_tracker.TCPSession;
 exports.DNSCache = DNSCache;
 
+var sessionPool = [];
+
 // This may be overriden by the user
 exports.warningHandler = function warningHandler(x) {
     console.warn('warning: %s - this may not actually work', x);
@@ -34,7 +36,10 @@ function PcapSession(is_live, device_name, filter, buffer_size, snap_length, out
     this.empty_reads = 0;
     this.packets_read = null;
 
-    this.session = new binding.PcapSession();
+    this.session = sessionPool.shift();
+    if (!this.session) {
+        this.session = new binding.PcapSession();
+    }
 
     if (typeof this.buffer_size === "number" && !isNaN(this.buffer_size)) {
         this.buffer_size = Math.round(this.buffer_size);
@@ -72,6 +77,10 @@ function PcapSession(is_live, device_name, filter, buffer_size, snap_length, out
             var packets_read = this.session.dispatch(this.buf, this.header);
             if (packets_read < 1) {
                 this.empty_reads += 1;
+            }
+            if (packets_read === -2) {
+                sessionPool.push(this.session);
+                this.session = null;
             }
         };
         this.session.start_polling();
